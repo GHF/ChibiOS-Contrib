@@ -157,6 +157,14 @@ EICUDriver EICUD13;
 EICUDriver EICUD14;
 #endif
 
+/**
+ * @brief   EICUD16 driver identifier.
+ * @note    The driver EICUD16 allocates the timer TIM16 when enabled.
+ */
+#if STM32_EICU_USE_TIM16 && !defined(__DOXYGEN__)
+EICUDriver EICUD16;
+#endif
+
 /*===========================================================================*/
 /* Driver local variables and types.                                         */
 /*===========================================================================*/
@@ -759,6 +767,28 @@ OSAL_IRQ_HANDLER(STM32_TIM14_HANDLER) {
 }
 #endif /* STM32_EICU_USE_TIM14 */
 
+#if STM32_EICU_USE_TIM16
+#if !defined(STM32_TIM16_HANDLER)
+#error "STM32_TIM16_HANDLER not defined"
+#endif
+/**
+ * @brief   TIM16 interrupt handler.
+ * @note    It is assumed that the various sources are only activated if the
+ *          associated callback pointer is not equal to @p NULL in order to not
+ *          perform an extra check in a potentially critical interrupt handler.
+ *
+ * @isr
+ */
+OSAL_IRQ_HANDLER(STM32_TIM16_HANDLER) {
+
+  OSAL_IRQ_PROLOGUE();
+
+  eicu_lld_serve_interrupt(&EICUD16);
+
+  OSAL_IRQ_EPILOGUE();
+}
+#endif /* STM32_EICU_USE_TIM16 */
+
 /*===========================================================================*/
 /* Driver exported functions.                                                */
 /*===========================================================================*/
@@ -839,6 +869,12 @@ void eicu_lld_init(void) {
   /* Driver initialization.*/
   eicuObjectInit(&EICUD14);
   EICUD14.tim = STM32_TIM14;
+#endif
+
+#if STM32_EICU_USE_TIM16
+  /* Driver initialization.*/
+  eicuObjectInit(&EICUD16);
+  EICUD16.tim = STM32_TIM16;
 #endif
 }
 
@@ -979,6 +1015,15 @@ void eicu_lld_start(EICUDriver *eicup) {
       eicup->clock = STM32_TIMCLK1;
     }
 #endif
+#if STM32_EICU_USE_TIM16
+    if (&EICUD16 == eicup) {
+      rccEnableTIM16(FALSE);
+      rccResetTIM16();
+      nvicEnableVector(STM32_TIM16_NUMBER, STM32_EICU_TIM16_IRQ_PRIORITY);
+      eicup->channels = 1;
+      eicup->clock = STM32_TIMCLK1;
+    }
+#endif
   }
   else {
     /* Driver re-configuration scenario, it must be stopped first.*/
@@ -1027,7 +1072,7 @@ void eicu_lld_start(EICUDriver *eicup) {
                  (eicup->config->iccfgp[3] == NULL));
   }
 
-  /* TIM10, TIM11, TIM13 and TIM14 have only 1 channel.*/
+  /* TIM10, TIM11, TIM13 and TIM14, TIM16 have only 1 channel.*/
   if (eicup->channels == 1) {
     osalDbgCheck((eicup->config->iccfgp[1] == NULL) &&
                  (eicup->config->iccfgp[2] == NULL) &&
@@ -1126,6 +1171,12 @@ void eicu_lld_stop(EICUDriver *eicup) {
     if (&EICUD14 == eicup) {
       nvicDisableVector(STM32_TIM14_NUMBER);
       rccDisableTIM14();
+    }
+#endif
+#if STM32_EICU_USE_TIM16
+    if (&EICUD16 == eicup) {
+      nvicDisableVector(STM32_TIM16_NUMBER);
+      rccDisableTIM16();
     }
 #endif
 }
